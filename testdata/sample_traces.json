@@ -1,0 +1,50 @@
+{
+  "version": "1.0",
+  "recordedAt": "2026-09-02T13:00:00Z",
+  "serverCmd": "go run ./testdata/good_server",
+  "events": [
+    {
+      "timestamp": "2026-09-02T13:00:01Z",
+      "direction": "request",
+      "method": "tools/list",
+      "tokenCount": 18,
+      "rawBytes": 45
+    },
+    {
+      "timestamp": "2026-09-02T13:00:01Z",
+      "direction": "response",
+      "method": "tools/list",
+      "tokenCount": 240,
+      "rawBytes": 850
+    },
+    {
+      "timestamp": "2026-09-02T13:00:02Z",
+      "direction": "request",
+      "method": "tools/call",
+      "toolName": "list_items",
+      "tokenCount": 25,
+      "rawBytes": 80
+    },
+    {
+      "timestamp": "2026-09-02T13:00:02Z",
+      "direction": "response",
+      "method": "tools/call",
+      "toolName": "list_items",
+      "durationMs": 35,
+      "tokenCount": 180,
+      "rawBytes": 600,
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"items\":[{\"id\":\"1\",\"name\":\"Widget\"}],\"nextCursor\":null}"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
