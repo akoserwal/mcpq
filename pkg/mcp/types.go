@@ -46,9 +46,9 @@ type InitializeParams struct {
 
 // ClientCapabilities represents MCP client capabilities.
 type ClientCapabilities struct {
-	Roots        *RootsCapability        `json:"roots,omitempty"`
-	Sampling     *SamplingCapability     `json:"sampling,omitempty"`
-	Experimental map[string]any          `json:"experimental,omitempty"`
+	Roots        *RootsCapability    `json:"roots,omitempty"`
+	Sampling     *SamplingCapability `json:"sampling,omitempty"`
+	Experimental map[string]any      `json:"experimental,omitempty"`
 }
 
 // RootsCapability defines roots capability options.
@@ -75,11 +75,11 @@ type InitializeResult struct {
 
 // ServerCapabilities represents MCP server capabilities.
 type ServerCapabilities struct {
-	Tools        *ToolsCapability        `json:"tools,omitempty"`
-	Resources    *ResourcesCapability    `json:"resources,omitempty"`
-	Prompts      *PromptsCapability      `json:"prompts,omitempty"`
-	Logging      *LoggingCapability      `json:"logging,omitempty"`
-	Experimental map[string]any          `json:"experimental,omitempty"`
+	Tools        *ToolsCapability     `json:"tools,omitempty"`
+	Resources    *ResourcesCapability `json:"resources,omitempty"`
+	Prompts      *PromptsCapability   `json:"prompts,omitempty"`
+	Logging      *LoggingCapability   `json:"logging,omitempty"`
+	Experimental map[string]any       `json:"experimental,omitempty"`
 }
 
 // ToolsCapability defines tool options.
@@ -103,9 +103,11 @@ type LoggingCapability struct{}
 
 // Tool represents an MCP tool definition.
 type Tool struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description,omitempty"`
-	InputSchema ToolInputSchema `json:"inputSchema"`
+	Name         string          `json:"name"`
+	Description  string          `json:"description,omitempty"`
+	InputSchema  ToolInputSchema `json:"inputSchema"`
+	OutputSchema json.RawMessage `json:"outputSchema,omitempty"`
+	RawJSON      json.RawMessage `json:"-"`
 }
 
 // ToolInputSchema represents the JSON Schema for a tool's input arguments.
@@ -175,8 +177,10 @@ type CallToolParams struct {
 
 // CallToolResult represents the response from tools/call.
 type CallToolResult struct {
-	Content []Content `json:"content"`
-	IsError bool      `json:"isError,omitempty"`
+	Content           []Content       `json:"content"`
+	IsError           bool            `json:"isError,omitempty"`
+	StructuredContent json.RawMessage `json:"structuredContent,omitempty"`
+	RawJSON           json.RawMessage `json:"-"`
 }
 
 // Content represents content returned by tool execution.
@@ -185,4 +189,29 @@ type Content struct {
 	Text     string `json:"text,omitempty"`
 	Data     string `json:"data,omitempty"`
 	MIMEType string `json:"mimeType,omitempty"`
+}
+
+// UnmarshalJSON retains the complete received definition for token accounting,
+// including JSON Schema keywords and MCP extensions unknown to the typed view.
+func (t *Tool) UnmarshalJSON(data []byte) error {
+	type tool Tool
+	var decoded tool
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*t = Tool(decoded)
+	t.RawJSON = append(json.RawMessage(nil), data...)
+	return nil
+}
+
+// UnmarshalJSON retains the complete received result for benchmark accounting.
+func (r *CallToolResult) UnmarshalJSON(data []byte) error {
+	type result CallToolResult
+	var decoded result
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*r = CallToolResult(decoded)
+	r.RawJSON = append(json.RawMessage(nil), data...)
+	return nil
 }

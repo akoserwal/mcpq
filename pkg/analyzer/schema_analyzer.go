@@ -57,7 +57,10 @@ func AnalyzeSchema(tools []mcp.Tool, resources []mcp.Resource, prompts []mcp.Pro
 	totalParams := 0
 
 	for _, tool := range tools {
-		toolJSON, _ := json.Marshal(tool)
+		toolJSON := tool.RawJSON
+		if len(toolJSON) == 0 {
+			toolJSON, _ = json.Marshal(tool)
+		}
 		toolTokens := tok.CountTokens(string(toolJSON))
 		totalTokens += toolTokens
 

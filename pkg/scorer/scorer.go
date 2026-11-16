@@ -1,6 +1,7 @@
 package scorer
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/akoserwal/mcpq/pkg/analyzer"
@@ -116,20 +117,6 @@ func CalculateScore(schema *analyzer.SchemaAnalysis, traces *analyzer.TraceAnaly
 		default:
 			breakdown.ResponseEfficiency += 0
 		}
-	} else {
-		// Static estimate based on absence of payload size warnings
-		hasUnbounded := false
-		for _, f := range findings {
-			if f.RuleID == "MCP003" || f.RuleID == "MCP004" {
-				hasUnbounded = true
-				break
-			}
-		}
-		if !hasUnbounded {
-			breakdown.ResponseEfficiency = 30
-		} else {
-			breakdown.ResponseEfficiency = 15
-		}
 	}
 
 	// 4. Progressive Disclosure (Max 15 pts)
@@ -203,6 +190,30 @@ func CalculateScore(schema *analyzer.SchemaAnalysis, traces *analyzer.TraceAnaly
 		}
 	}
 
+	// Normalize only the dimensions supported by the supplied evidence.
+	hasSchema := schema != nil && schema.ToolCount > 0
+	hasRuntime := traces != nil && traces.TotalToolCalls > 0
+	scope := "none"
+	measuredPoints := 0.0
+	samples := 0
+	if hasSchema {
+		measuredPoints += 65
+		scope = "static"
+	} else {
+		breakdown.SchemaEfficiency = 0
+		breakdown.ToolDesign = 0
+		breakdown.ProgressiveDisclosure = 0
+		breakdown.Discoverability = 0
+	}
+	if hasRuntime {
+		measuredPoints += 30
+		samples = traces.TotalToolCalls
+		if hasSchema {
+			scope = "combined"
+		} else {
+			scope = "runtime"
+		}
+	}
 	rawTotal := breakdown.SchemaEfficiency +
 		breakdown.ToolDesign +
 		breakdown.ResponseEfficiency +
@@ -210,7 +221,10 @@ func CalculateScore(schema *analyzer.SchemaAnalysis, traces *analyzer.TraceAnaly
 		breakdown.Discoverability -
 		breakdown.Penalties
 
-	finalScore := int(math.Round(rawTotal))
+	finalScore := 0
+	if measuredPoints > 0 {
+		finalScore = int(math.Round(100 * rawTotal / measuredPoints))
+	}
 	if finalScore > 100 {
 		finalScore = 100
 	}
@@ -220,11 +234,26 @@ func CalculateScore(schema *analyzer.SchemaAnalysis, traces *analyzer.TraceAnaly
 
 	grade := ComputeGrade(finalScore)
 
+	summary := fmt.Sprintf("%s assessment; normalized over %.0f measured points. Unmeasured dimensions are excluded (shown as 0).", scope, measuredPoints)
+	if !hasRuntime {
+		summary += " Runtime efficiency has not been measured."
+	}
+	if !hasSchema {
+		summary += " Schema quality has not been measured."
+	}
+	if samples == 1 {
+		summary += " One response sample only; percentiles and latency are not representative."
+	} else if samples > 1 {
+		summary += fmt.Sprintf(" Based on %d response samples; results apply only to the recorded workload.", samples)
+	}
 	return &QualityScore{
-		Score:     finalScore,
-		Grade:     grade,
-		Summary:   GetGradeSummary(grade),
-		Breakdown: breakdown,
-		Findings:  findings,
+		Scope:          scope,
+		MeasuredPoints: measuredPoints,
+		RuntimeSamples: samples,
+		Score:          finalScore,
+		Grade:          grade,
+		Summary:        summary,
+		Breakdown:      breakdown,
+		Findings:       findings,
 	}
 }

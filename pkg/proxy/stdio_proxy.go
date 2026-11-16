@@ -72,19 +72,22 @@ func (p *StdioProxy) Run(stdin io.Reader, stdout io.Writer, stderr io.Writer) er
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(3)
+	wg.Add(2)
+	stopped := make(chan struct{})
+	inputDone := make(chan struct{})
 
 	// Forward Stderr
 	go func() {
 		defer wg.Done()
-		if stderr != nil {
-			_, _ = io.Copy(stderr, serverErr)
+		if stderr == nil {
+			stderr = io.Discard
 		}
+		_, _ = io.Copy(stderr, serverErr)
 	}()
 
 	// Intercept Stdin (Client -> Server)
 	go func() {
-		defer wg.Done()
+		defer close(inputDone)
 		defer serverIn.Close()
 
 		scanner := bufio.NewScanner(stdin)
@@ -93,6 +96,11 @@ func (p *StdioProxy) Run(stdin io.Reader, stdout io.Writer, stderr io.Writer) er
 		scanner.Buffer(buf, maxBuf)
 
 		for scanner.Scan() {
+			select {
+			case <-stopped:
+				return
+			default:
+			}
 			line := scanner.Bytes()
 			if len(line) == 0 {
 				continue
@@ -141,8 +149,17 @@ func (p *StdioProxy) Run(stdin io.Reader, stdout io.Writer, stderr io.Writer) er
 		}
 	}()
 
-	err = cmd.Wait()
+	// Drain output before Wait closes the subprocess pipes.
 	wg.Wait()
+	err = cmd.Wait()
+	close(stopped)
+	_ = serverIn.Close()
+	// Close interruptible input so its reader cannot outlive the proxy. A generic
+	// io.Reader cannot be canceled; it will exit when its next read returns.
+	if closer, ok := stdin.(io.ReadCloser); ok {
+		_ = closer.Close()
+		<-inputDone
+	}
 	return err
 }
 

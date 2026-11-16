@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"time"
@@ -71,13 +72,13 @@ capturing runtime tokens, latency distributions, and memory payload sizes.`,
 			return fmt.Errorf("initialize failed: %w", err)
 		}
 		initDur := time.Since(initStart).Milliseconds()
-		fmt.Printf("✓ MCP Handshake completed with %s v%s in %dms\n", initRes.ServerInfo.Name, initRes.ServerInfo.Version, initDur)
+		fmt.Fprintf(os.Stderr, "✓ MCP Handshake completed with %s v%s in %dms\n", initRes.ServerInfo.Name, initRes.ServerInfo.Version, initDur)
 
 		tools, err := client.ListTools(ctx)
 		if err != nil {
 			return fmt.Errorf("list tools failed: %w", err)
 		}
-		fmt.Printf("✓ Discovered %d tools\n\n", len(tools))
+		fmt.Fprintf(os.Stderr, "✓ Discovered %d tools\n\n", len(tools))
 
 		var scenarios []Scenario
 		if benchConfigFile != "" {
@@ -102,28 +103,34 @@ capturing runtime tokens, latency distributions, and memory payload sizes.`,
 			}
 		}
 
-		fmt.Println("Running benchmark scenarios...")
+		fmt.Fprintln(os.Stderr, "Running benchmark scenarios...")
 		for _, sc := range scenarios {
 			iters := sc.Iterations
 			if iters <= 0 {
 				iters = 1
 			}
 
-			fmt.Printf("  • Running scenario %q (tool: %s, iterations: %d)... ", sc.Name, sc.Tool, iters)
+			fmt.Fprintf(os.Stderr, "  • Running scenario %q (tool: %s, iterations: %d)... ", sc.Name, sc.Tool, iters)
 			for i := 0; i < iters; i++ {
 				callStart := time.Now()
 				res, err := client.CallTool(ctx, sc.Tool, sc.Args)
 				callDur := time.Since(callStart).Milliseconds()
 
 				if err != nil {
-					fmt.Printf(" [Error: %v]\n", err)
-					break
+					return fmt.Errorf("scenario %q iteration %d: %w", sc.Name, i+1, err)
 				}
 
-				tokCount := 0
-				for _, c := range res.Content {
-					tokCount += tok.CountTokens(c.Text) + tok.CountTokens(c.Data)
+				if res.IsError {
+					return fmt.Errorf("scenario %q iteration %d: tool %q returned isError=true", sc.Name, i+1, sc.Tool)
 				}
+				result := res.RawJSON
+				if len(result) == 0 {
+					result, err = json.Marshal(res)
+					if err != nil {
+						return fmt.Errorf("encode benchmark response: %w", err)
+					}
+				}
+				response := &mcp.Response{JSONRPC: mcp.JSONRPCVersion, Result: result}
 
 				traceEvents = append(traceEvents, linter.TraceEvent{
 					Timestamp:  time.Now(),
@@ -131,13 +138,14 @@ capturing runtime tokens, latency distributions, and memory payload sizes.`,
 					Method:     "tools/call",
 					ToolName:   sc.Tool,
 					DurationMs: callDur,
-					TokenCount: tokCount,
+					Response:   response,
+					TokenCount: tok.CountJSONTokens(response),
 				})
 			}
-			fmt.Printf("done.\n")
+			fmt.Fprintf(os.Stderr, "done.\n")
 		}
 
-		fmt.Println("")
+		fmt.Fprintln(os.Stderr)
 
 		// Analyze
 		schemaAnalysis := analyzer.AnalyzeSchema(tools, nil, nil, tok)

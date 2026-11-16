@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -45,7 +46,19 @@ func (p *SSEProxy) Recorder() *Recorder {
 
 // Start begins listening on listenAddr.
 func (p *SSEProxy) Start(listenAddr string) error {
+	p.server = &http.Server{Addr: listenAddr, Handler: p.handler()}
+	return p.server.ListenAndServe()
+}
+
+func (p *SSEProxy) handler() http.Handler {
 	proxy := httputil.NewSingleHostReverseProxy(p.targetURL)
+	proxy.ModifyResponse = func(resp *http.Response) error {
+		mediaType, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type"))
+		if mediaType == "text/event-stream" || mediaType == "application/json" {
+			resp.Body = &recordingBody{ReadCloser: resp.Body, recorder: p.recorder, sse: mediaType == "text/event-stream"}
+		}
+		return nil
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -67,12 +80,7 @@ func (p *SSEProxy) Start(listenAddr string) error {
 		proxy.ServeHTTP(w, r)
 	})
 
-	p.server = &http.Server{
-		Addr:    listenAddr,
-		Handler: mux,
-	}
-
-	return p.server.ListenAndServe()
+	return mux
 }
 
 // Shutdown stops the proxy server.

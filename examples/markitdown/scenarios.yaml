@@ -1,0 +1,6 @@
+scenarios:
+  - name: text-conversion
+    tool: convert_to_markdown
+    iterations: 1
+    args:
+      uri: "data:text/plain,Hello%20from%20MarkItDown"

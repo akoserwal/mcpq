@@ -34,6 +34,8 @@ cd mcpq
 go build -o bin/mcpq .
 ```
 
+For a complete walkthrough, see [Run mcpq against an MCP server](docs/running-against-mcp.md). It uses MarkItDown to demonstrate setup, schema analysis, CI linting, conversion benchmarks, SSE connections, and recorded client traffic. A ready-to-run [MarkItDown benchmark scenario](examples/markitdown/scenarios.yaml) is included.
+
 ---
 
 ## 🛠 Usage & CLI Commands
@@ -125,7 +127,11 @@ mcpq bench --config=scenarios.yaml -- python server.py
 
 ## 📊 Quality Scoring Formula (0–100)
 
-$$\text{Quality Score} = \max(0, \min(100, S_{\text{schema}} + S_{\text{design}} + S_{\text{response}} + S_{\text{progressive}} + S_{\text{discover}} - P_{\text{penalties}}))$$
+$$\text{Quality Score} = \max(0, \min(100, \operatorname{round}(100 \times (S_{\text{measured}} - P_{\text{penalties}}) / M_{\text{measured}})))$$
+
+Scores use only measured dimensions: static analysis has 65 available points, runtime analysis has 30, and combined analysis has 95. The result is normalized to 100. Missing dimensions earn no points and are excluded from the denominator; reports identify the assessment scope and response sample count. With no measurements, the score is 0.
+
+A single response is a smoke check, not a representative latency or percentile benchmark. Runtime scores apply only to the recorded workload. Benchmark scenarios that return protocol errors or `isError: true` fail the command.
 
 ### Sub-Score Allocations:
 - **Schema Efficiency (20 pts)**: Average tokens per tool and total schema overhead.

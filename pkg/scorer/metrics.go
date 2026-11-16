@@ -28,11 +28,14 @@ const (
 
 // QualityScore contains overall quality score and rating metrics.
 type QualityScore struct {
-	Score     int            `json:"score"` // 0 to 100
-	Grade     Grade          `json:"grade"`
-	Summary   string         `json:"summary"`
-	Breakdown ScoreBreakdown `json:"breakdown"`
-	Findings  []linter.Finding `json:"findings"`
+	Scope          string           `json:"scope"` // static, runtime, combined, or none
+	MeasuredPoints float64          `json:"measuredPoints"`
+	RuntimeSamples int              `json:"runtimeSamples"`
+	Score          int              `json:"score"` // 0 to 100
+	Grade          Grade            `json:"grade"`
+	Summary        string           `json:"summary"`
+	Breakdown      ScoreBreakdown   `json:"breakdown"`
+	Findings       []linter.Finding `json:"findings"`
 }
 
 // ComputeGrade maps a numerical score to a grade.

@@ -21,11 +21,11 @@ type SSEClient struct {
 	messageURL *url.URL
 	httpClient *http.Client
 
-	mu       sync.Mutex
-	pending  map[int64]chan *Response
-	reqID    atomic.Int64
-	closed   bool
-	cancel   context.CancelFunc
+	mu      sync.Mutex
+	pending map[int64]chan *Response
+	reqID   atomic.Int64
+	closed  bool
+	cancel  context.CancelFunc
 }
 
 // NewSSEClient creates an SSEClient connected to the provided endpoint URL.
@@ -274,6 +274,26 @@ func (c *SSEClient) Initialize(ctx context.Context) (*InitializeResult, error) {
 		return nil, fmt.Errorf("failed to decode initialize result: %w", err)
 	}
 
+	notification, err := json.Marshal(Request{JSONRPC: JSONRPCVersion, Method: "notifications/initialized"})
+	if err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	endpoint := c.messageURL.String()
+	c.mu.Unlock()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(notification))
+	if err != nil {
+		return nil, fmt.Errorf("create initialized notification: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	response, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("send initialized notification: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return nil, fmt.Errorf("initialized notification returned status: %s", response.Status)
+	}
 	return &result, nil
 }
 

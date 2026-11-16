@@ -19,11 +19,11 @@ type StdioClient struct {
 	stderr  io.ReadCloser
 	scanner *bufio.Scanner
 
-	mu       sync.Mutex
-	pending  map[int64]chan *Response
-	reqID    atomic.Int64
-	closed   bool
-	closeCh  chan struct{}
+	mu      sync.Mutex
+	pending map[int64]chan *Response
+	reqID   atomic.Int64
+	closed  bool
+	closeCh chan struct{}
 }
 
 // NewStdioClient starts the target command and creates a StdioClient.
@@ -73,6 +73,7 @@ func NewStdioClient(command string, args []string, env []string) (*StdioClient, 
 	buf := make([]byte, 64*1024)
 	c.scanner.Buffer(buf, maxScanBuffer)
 
+	go func() { _, _ = io.Copy(io.Discard, stderr) }()
 	go c.readLoop()
 
 	return c, nil
